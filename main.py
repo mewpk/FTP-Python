@@ -10,10 +10,30 @@ class FTPClient:
         self.is_connected = False
 
     def connect(self, host, port=21):
-        self.control_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.control_socket.connect((host, port))
-        self.is_connected = True
-        print(self._read_response())
+        try:
+            self.control_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.control_socket.connect((host, port))
+            self.is_connected = True
+            response = self._read_response()
+            print(response)
+
+            # Prompt for username and password right after connection.
+            self._prompt_for_login()
+
+            return True
+        except Exception as e:
+            print(f"Failed to connect: {e}")
+            return False
+
+    def _prompt_for_login(self):
+        username = input("User: ").strip()
+        if username:
+            response = self.send_command(f"USER {username}")
+            print(response)
+            password = input("Password: ").strip()
+            response = self.send_command(f"PASS {password}")
+            print(response)
+
 
     def _read_response(self):
         response = ''
@@ -154,7 +174,9 @@ def main():
         elif action == 'open' and len(cmd) >= 2:
             host = cmd[1]
             port = int(cmd[2]) if len(cmd) == 3 else 21
-            ftp.connect(host, port)
+            if ftp.connect(host, port):
+                # Connection successful, login handled within connect method
+                pass
         elif action == 'login' and len(cmd) >= 3:
             ftp.login(cmd[1], cmd[2])
         elif action == 'ls':
