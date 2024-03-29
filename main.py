@@ -130,14 +130,26 @@ class FTPClient:
             print("Could not enter port mode.")
             return
         print(self.send_command(f"RETR {filename}"))
-        with open(filename, 'wb') as f:
-            while True:
-                data = self.data_socket.recv(4096)
-                if not data:
-                    break
-                f.write(data)
-        print(f"{filename} has been downloaded.")
-        self.data_socket.close()
+        try:
+            self.data_socket, _ = self.data_listener.accept()
+            return True
+        except Exception as e:
+            print(f"Failed to establish data connection in PORT mode: {e}")
+            return False
+        finally:
+            with open(filename, 'wb') as f:
+                while True:
+                    data = self.data_socket.recv(4096)
+                    if not data:
+                        break
+                    f.write(data)
+            print(f"{filename} has been downloaded."  , end="")
+            if self.data_listener:
+                self.data_listener.close()
+                self.data_listener = None
+            file_list = self._read_response()
+            print(file_list, end="")
+
 
     def put_file(self, filename):
         if not self.port_mode():
