@@ -79,8 +79,6 @@ class FTPClient:
 
         return response
 
-        
-
     def list_files(self):
         if not self.is_connected:
             print("You are not connected to any server.")
@@ -137,7 +135,7 @@ class FTPClient:
             print(f"Failed to establish data connection in PORT mode: {e}")
             return False
         finally:
-            with open(filename, 'wb') as f:
+            with open(f"dist/{filename}", 'wb') as f:
                 while True:
                     data = self.data_socket.recv(4096)
                     if not data:
