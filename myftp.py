@@ -27,7 +27,9 @@ class FTPClient:
             return False
 
     def _prompt_for_login(self):
-        username = input("User: ").strip()
+        response = self.send_command("OPTS UTF8 ON")
+        print(response , end="")
+        username = input(f"User ({self.host}:(none)): ").strip()
         if username:
             response = self.send_command(f"USER {username}")
             print(response , end="")
