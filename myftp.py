@@ -1,4 +1,5 @@
 import socket
+import os
 
 class FTPClient:
     def __init__(self):
@@ -90,7 +91,7 @@ class FTPClient:
 
         return response
 
-    def list_files(self):
+    def list_files(self , directory = "" , filename = "" ):
         if not self.is_connected:
             print("You are not connected to any server.")
             return
@@ -99,7 +100,11 @@ class FTPClient:
             print("Failed to enter port mode.")
             return
         
-        response = self.send_command("NLST")
+        command_message = "NLST"
+        if directory:
+            command_message += f" {directory}"
+        response = self.send_command(command_message)
+
         print(response , end="")
         
 
@@ -111,12 +116,17 @@ class FTPClient:
             return False
         finally:
             file_list = self._read_data()
-            print(file_list, end="")
+            if (filename):
+                with open(filename, 'w') as file:
+                    file.write(file_list)
+            else :
+                print(file_list, end="")
+                
             if self.data_listener:
                 self.data_listener.close()
                 self.data_listener = None
-            file_list = self._read_response()
-            print(file_list, end="")
+            response = self._read_response()
+            print(response, end="")
            
 
     def _read_data(self):
@@ -134,11 +144,15 @@ class FTPClient:
 
         return data
 
-    def get_file(self, filename):
+    def get_file(self, remote_target="" , local_target=""):
         if not self.port_mode():
             print("Could not enter port mode.")
             return
-        print(self.send_command(f"RETR {filename}"),end="")
+        if not remote_target:
+            remote_target = input("Remote file ")
+            local_target = input("Local file ")
+
+        print(self.send_command(f"RETR {remote_target}"),end="")
         try:
             self.data_socket, _ = self.data_listener.accept()
             return True
@@ -146,7 +160,9 @@ class FTPClient:
             print(f"Failed to establish data connection in PORT mode: {e}")
             return False
         finally:
-            with open(filename, 'wb') as f:
+            if local_target:
+                local_target = os.getcwd()+"\\"+local_target
+            with open(local_target, 'wb') as f:
                 while True:
                     data = self.data_socket.recv(4096)
                     if not data:
@@ -159,22 +175,31 @@ class FTPClient:
             print(file_list, end="")
 
 
-    def put_file(self, filename):
+    def put_file(self, remote_target="", local_target=""):
         if not self.port_mode():
             print("Could not enter port mode.")
             return
-        response = self.send_command(f"STOR {filename}")
+        if not local_target:  # If no local file is specified, ask the user for it.
+            local_target = input("Local file: ")
+            remote_target = input("Remote file (leave blank to use the local file name): ") or os.path.basename(local_target)
+        # Check if the local file exists before attempting to upload.
+        if not os.path.isfile(local_target):
+            print(f"Local file does not exist: {local_target}")
+            return
+
+        response = self.send_command(f"STOR {remote_target}")
         print(response, end="")
+
         try:
             self.data_socket, _ = self.data_listener.accept()
-            with open(filename, 'rb') as f:
+            with open(local_target, 'rb') as f:
                 while True:
                     data = f.read(4096)
                     if not data:
                         break
                     self.data_socket.send(data)
         except Exception as e:
-            print(f"Failed to upload {filename}: {e}")
+            print(f"Failed to upload {remote_target}: {e}")
         finally:
             if self.data_socket:
                 self.data_socket.close()
@@ -182,7 +207,8 @@ class FTPClient:
             if self.data_listener:
                 self.data_listener.close()
                 self.data_listener = None
-            print(self._read_response(), end="")  # Read final response from the control connection
+            response = self._read_response()
+            print(response, end="")
 
     def change_directory(self, directory):
         if not self.is_connected:
@@ -210,8 +236,11 @@ class FTPClient:
         else:
             print("Unknown mode. Use 'ascii' or 'binary'.",end="")
 
-    def delete_file(self, filename):
+    def delete_file(self, filename=""):
         """Delete a file on the server."""
+        if not filename:
+            filename = input("Remote file :")
+
         print(self.send_command(f"DELE {filename}"),end="")
 
     def rename_file(self, old_name, new_name):
@@ -240,39 +269,67 @@ def main():
         action = cmd[0].lower() if cmd else 'help'
 
         if action == 'quit' or action == 'bye':
-            ftp.quit()
+            if ftp.is_connected:
+                ftp.quit()
+            else:
+                print("Bye!")
             break
         elif action == 'open':
             if ftp.is_connected :
                 print(f"Already connected to {ftp.host}. Use disconnect first.")
-                return
-            host = cmd[1]
-            port = int(cmd[2]) if len(cmd) == 3 else 21
+                continue
+            if len(cmd) < 2:
+                host = input("to ").strip()
+                port = 21
+            else :
+                host = cmd[1]
+                port = int(cmd[2]) if len(cmd) == 3 else 21
             if ftp.connect(host, port):
-                # Connection successful, login handled within connect method
-                pass
+                continue
         elif action == 'user':
             ftp.login()
         elif action == 'ls':
-            ftp.list_files()
-        elif action == 'get' and len(cmd) == 2:
-            ftp.get_file(cmd[1])
-        elif action == 'put' and len(cmd) == 2:
-            ftp.put_file(cmd[1])
+            if len(cmd) == 3:
+                ftp.list_files(cmd[1], cmd[2])
+            elif len(cmd) == 2:
+                ftp.list_files(cmd[1])
+            else:
+                ftp.list_files()
+        elif action == 'get' :
+            if len(cmd) == 3 :
+                ftp.get_file(cmd[1], cmd[2])
+            elif len(cmd) == 2:
+                ftp.get_file(cmd[1])
+            else :
+                ftp.get_file()
+        elif action == 'put' :
+            if len(cmd) == 3 :
+                ftp.put_file(cmd[1],cmd[2])
+            elif len(cmd) == 2:
+                ftp.put_file(cmd[1])
+            else :
+                ftp.put_file()
+            
         elif action == 'cd' and len(cmd) == 2:
             ftp.change_directory(cmd[1])
         elif action == 'pwd':
             ftp.print_working_directory()
         elif action == 'ascii' or action == 'binary':
             ftp.set_transfer_mode(action)
-        elif action == 'delete' and len(cmd) == 2:
-            ftp.delete_file(cmd[1])
+        elif action == 'delete' :
+            if len(cmd) == 2:
+                ftp.delete_file(cmd[1])
+            else :
+                ftp.delete_file()
         elif action == 'rename' and len(cmd) == 3:
             ftp.rename_file(cmd[1], cmd[2])
         elif action == "rename" :
             ftp.rename_filev2()
         elif action == "close" or action == "disconnect":
-            ftp.quit()
+            if ftp.is_connected:
+                ftp.quit()
+            else:
+                print("Bye!")
         elif action == 'help':
             print(
                 "Commands: open, login, ls, get, put, cd, pwd, ascii, binary, delete, rename, quit ,disconnect ,close ")
